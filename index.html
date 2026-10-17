@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Credit Ledger: speak, type or snap a photo</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Noto+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef0f8;--card:#fff;--ink:#1c1f3a;--mute:#626782;--line:#d9dcec;--brand:#2b2f77;--saffron:#e8590c;--red:#c92a2a;--green:#2b8a3e}
+@media (prefers-color-scheme:dark){:root{--bg:#10122a;--card:#1a1d3d;--ink:#eceefb;--mute:#a3a8cf;--line:#303567;--brand:#8e94ff;--saffron:#ff8a4c;--red:#ff7b7b;--green:#69db7c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Noto Sans","Noto Sans Devanagari",system-ui,sans-serif}
+header{background:var(--brand);color:#fff;padding:18px 16px}
+@media (prefers-color-scheme:dark){header{background:#232766}}
+.top{max-width:1000px;margin:0 auto;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center}
+h1,h2,h3{font-family:"Baloo 2","Noto Sans Devanagari",sans-serif;margin:0;line-height:1.15}
+h1{font-size:30px}h2{font-size:20px;margin-bottom:10px}
+.shop{font-size:13px;opacity:.9}.shop code{background:rgba(255,255,255,.15);padding:2px 6px;border-radius:6px}
+.shop button{background:none;border:0;color:#fff;text-decoration:underline;cursor:pointer;font:inherit}
+main{max-width:1000px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:1fr 1fr}
+@media (max-width:780px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.wide{grid-column:1/-1}
+.total{display:flex;gap:24px;flex-wrap:wrap}
+.total b{font:700 34px "Baloo 2";color:var(--saffron);display:block;line-height:1}
+.total span{color:var(--mute);font-size:14px}
+textarea,input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+textarea{min-height:90px;resize:vertical}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+button.p{background:var(--saffron);color:#fff;border:0;border-radius:10px;padding:11px 18px;font:600 15px inherit;cursor:pointer}
+button.s{background:transparent;border:1.5px solid var(--brand);color:var(--brand);border-radius:8px;padding:8px 12px;font:600 14px inherit;cursor:pointer}
+button.x{background:none;border:0;color:var(--red);cursor:pointer;font-size:18px}
+button:disabled{opacity:.5;cursor:wait}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--saffron);outline-offset:2px}
+.mic.on{background:var(--red);color:#fff;border-color:var(--red)}
+#msg{padding:0 16px;max-width:1000px;margin:12px auto 0;color:var(--mute)}#msg.err{color:var(--red);font-weight:600}
+.pv{display:grid;grid-template-columns:1.4fr .9fr .8fr 1fr auto;gap:6px;margin-bottom:6px}
+@media (max-width:520px){.pv{grid-template-columns:1fr 1fr}}
+.cust{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;padding:11px 12px;margin-bottom:6px;border:1.5px solid var(--line);border-left:5px solid var(--saffron);border-radius:8px;background:transparent;color:var(--ink);font:inherit;cursor:pointer}
+.cust.clear{border-left-color:var(--green)}.cust[aria-pressed=true]{background:var(--bg);border-color:var(--brand)}
+.amt{font-weight:700;font-variant-numeric:tabular-nums}.pos{color:var(--red)}.neg{color:var(--green)}
+.led{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line);align-items:center}
+.led small{color:var(--mute);display:block}
+.reply{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:12px;margin-top:10px}
+.empty{color:var(--mute)}
+[hidden]{display:none!important}
+label.f{display:block;margin-top:10px;font-weight:600}
+label.chk{display:flex;align-items:center;gap:8px;margin-top:10px}label.chk input{width:auto}
+</style>
+</head>
+<body>
+<header><div class="top">
+  <div><h1>Credit Ledger</h1><div>Speak, type or snap a photo. The ledger updates itself.</div></div>
+  <div class="shop"><span id="who"></span> <button id="logout" hidden>Log out</button></div>
+</div></header>
+<div id="msg" role="status" aria-live="polite"></div>
+<section id="auth" class="card" style="max-width:420px;margin:24px auto" hidden>
+  <h2>Log in or create an account</h2>
+  <label class="f">Email<input id="em" type="email" autocomplete="username" placeholder="aap@example.com"></label>
+  <label class="f">Password (at least 6 characters)<input id="pw" type="password" autocomplete="current-password" minlength="6"></label>
+  <label class="chk"><input type="checkbox" id="showpw"> Show password</label>
+  <div class="row"><button class="p" id="login">Log in</button><button class="s" id="signup">Create account</button></div>
+</section>
+<main id="app" hidden>
+  <section class="card wide total"><div><b id="tot">₹0</b><span>Total pending</span></div><div><b id="cnt" style="color:var(--brand)">0</b><span>Customers</span></div></section>
+
+  <section class="card">
+    <h2>New entry</h2>
+    <textarea id="text" placeholder="Write it the way you say it:&#10;Ramesh took 500 on credit, 2 kg sugar&#10;Sita paid back 200"></textarea>
+    <div class="row">
+      <button class="s mic" id="mic" hidden>🎤 Speak</button>
+      <label class="s" style="cursor:pointer;display:inline-block">📷 Photo of ledger page<input type="file" id="file" accept="image/*" hidden></label>
+      <span id="fname" class="empty"></span>
+    </div>
+    <div class="row"><button class="p" id="parse">Read with Gemma</button></div>
+    <div id="preview" style="margin-top:14px"></div>
+  </section>
+
+  <section class="card">
+    <h2>Customers</h2>
+    <input id="q" placeholder="Search by name" aria-label="Search customer">
+    <div id="list" style="margin-top:10px"></div>
+  </section>
+
+  <section class="card wide" id="detail" hidden></section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const inr = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+let entries = [], selected = null, imgB64 = null;
+let tok = JSON.parse(localStorage.getItem("ledger_auth") || "null");
+function showAuth() { const on = !!tok; $("auth").hidden = on; $("app").hidden = !on; $("logout").hidden = !on; $("who").textContent = on ? tok.email : ""; }
+function logout() { tok = null; localStorage.removeItem("ledger_auth"); entries = []; selected = null; showAuth(); }
+$("logout").onclick = () => { logout(); say("You are logged out."); };
+$("showpw").onchange = (e) => { $("pw").type = e.target.checked ? "text" : "password"; };
+async function doAuth(action) {
+  const email = $("em").value.trim(), password = $("pw").value;
+  if (!email || password.length < 6) return say("Enter an email and a password of at least 6 characters.", true);
+  say("Please wait...");
+  try {
+    const d = await post("/api/auth", { action, email, password });
+    if (d.pending) return say(d.message);
+    tok = d; localStorage.setItem("ledger_auth", JSON.stringify(tok)); $("pw").value = ""; say(""); showAuth(); load();
+  } catch (e) { say(e.message, true); }
+}
+$("login").onclick = () => doAuth("login"); $("signup").onclick = () => doAuth("signup");
+$("pw").onkeydown = (e) => { if (e.key === "Enter") doAuth("login"); };
+function say(m, err) { $("msg").textContent = m; $("msg").className = err ? "err" : ""; }
+function el(tag, props = {}, kids = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) k === "text" ? e.textContent = v : k === "class" ? e.className = v : e[k] = v;
+  [].concat(kids).forEach((k) => e.append(k)); return e;
+}
+async function api(path, opt = {}, retry = true) {
+  const r = await fetch(path, { ...opt, headers: { ...(opt.headers || {}), ...(tok ? { Authorization: "Bearer " + tok.access_token } : {}) } });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401 && retry && tok?.refresh_token) {
+    try { tok = { ...tok, ...(await post("/api/auth", { action: "refresh", refresh_token: tok.refresh_token })) }; localStorage.setItem("ledger_auth", JSON.stringify(tok)); return api(path, opt, false); }
+    catch { logout(); throw new Error("Session expired. Please log in again."); }
+  }
+  if (r.status === 401) { logout(); throw new Error("Please log in again."); }
+  if (!r.ok) throw new Error(d.error || "Server error"); return d;
+}
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+function balances() {
+  const m = new Map();
+  for (const e of entries) {
+    const k = e.customer.toLowerCase();
+    const c = m.get(k) || { name: e.customer, bal: 0, items: [] };
+    c.bal += (e.type === "udhaar" ? 1 : -1) * Number(e.amount);
+    if (e.type === "udhaar" && e.item && c.items.length < 3) c.items.push(e.item);
+    m.set(k, c);
+  }
+  return [...m.values()].sort((a, b) => b.bal - a.bal);
+}
+
+function render() {
+  const all = balances(), f = $("q").value.trim().toLowerCase();
+  $("tot").textContent = inr(all.reduce((s, c) => s + Math.max(c.bal, 0), 0));
+  $("cnt").textContent = all.length;
+  const list = $("list"); list.replaceChildren();
+  const shown = all.filter((c) => c.name.toLowerCase().includes(f));
+  if (!shown.length) list.append(el("p", { class: "empty", text: all.length ? "No matching customers." : "No entries yet. Add your first entry to get started." }));
+  shown.forEach((c) => list.append(el("button", { class: "cust" + (c.bal <= 0 ? " clear" : ""), onclick: () => { selected = c.name; render(); }, "aria-pressed": selected === c.name }, [
+    el("span", { text: c.name }),
+    el("span", { class: "amt " + (c.bal > 0 ? "pos" : "neg"), text: c.bal > 0 ? inr(c.bal) : c.bal < 0 ? "Advance " + inr(-c.bal) : "Settled" }),
+  ])));
+  renderDetail(all.find((c) => c.name === selected));
+}
+
+function renderDetail(c) {
+  const box = $("detail"); box.hidden = !c; if (!c) return; box.replaceChildren();
+  box.append(el("h2", { text: `${c.name}: ${c.bal > 0 ? inr(c.bal) + " pending" : "all settled"}` }));
+  entries.filter((e) => e.customer.toLowerCase() === c.name.toLowerCase()).forEach((e) => box.append(el("div", { class: "led" }, [
+    el("div", {}, [el("span", { text: e.type === "udhaar" ? (e.item || "Credit") : "Payment received" }), el("small", { text: new Date(e.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) })]),
+    el("div", {}, [el("span", { class: "amt " + (e.type === "udhaar" ? "pos" : "neg"), text: (e.type === "udhaar" ? "+ " : "- ") + inr(e.amount) }),
+      el("button", { class: "x", title: "Delete", "aria-label": "Delete entry", text: "✕", onclick: async () => { if (!confirm("Delete this entry?")) return; try { await api(`/api/entries?id=${e.id}`, { method: "DELETE" }); await load(); } catch (er) { say(er.message, true); } } })]),
+  ])));
+  if (c.bal > 0) {
+    const out = el("div");
+    const btn = el("button", { class: "p", text: "Generate payment reminder", onclick: async () => {
+      btn.disabled = true; out.replaceChildren(el("p", { class: "empty", text: "Gemma is writing the message..." }));
+      try {
+        const { message } = await post("/api/reminder", { customer: c.name, balance: c.bal, items: c.items.join(", ") });
+        out.replaceChildren(el("div", { class: "reply", text: message }), el("div", { class: "row" }, [
+          el("button", { class: "s", text: "Send on WhatsApp", onclick: () => window.open("https://wa.me/?text=" + encodeURIComponent(message), "_blank") }),
+          el("button", { class: "s", text: "Copy", onclick() { navigator.clipboard.writeText(message); this.textContent = "Copied"; } })]));
+      } catch (er) { out.replaceChildren(el("p", { class: "err", text: er.message })); }
+      btn.disabled = false;
+    } });
+    box.append(el("div", { class: "row" }, [btn]), out);
+  }
+}
+
+// parsed rows preview: user can fix anything before saving
+function showPreview(rows) {
+  const p = $("preview"); p.replaceChildren(el("strong", { text: "Review, then save:" }));
+  const inputs = rows.map((r) => {
+    const name = el("input", { value: r.customer, "aria-label": "Customer" });
+    const type = el("select", { "aria-label": "Type" }, [["udhaar", "Credit"], ["jama", "Payment"]].map(([v, t]) => el("option", { value: v, text: t, selected: r.type === v })));
+    const amt = el("input", { type: "number", min: "1", value: r.amount, "aria-label": "Amount" });
+    const item = el("input", { value: r.item, placeholder: "Item", "aria-label": "Item" });
+    const row = el("div", { class: "pv" }, [name, type, amt, item, el("button", { class: "x", text: "✕", "aria-label": "Remove row", onclick: () => { row.remove(); inputs.splice(inputs.findIndex((i) => i.row === row), 1); } })]);
+    p.append(row); return { row, name, type, amt, item };
+  });
+  const save = el("button", { class: "p", text: "Save", onclick: async () => {
+    save.disabled = true;
+    try {
+      const body = inputs.map((i) => ({ customer: i.name.value, type: i.type.value, amount: Number(i.amt.value), item: i.item.value }));
+      await post("/api/entries", { entries: body });
+      p.replaceChildren(); $("text").value = ""; clearPhoto(); say("Entry saved."); await load();
+    } catch (er) { say(er.message, true); }
+    save.disabled = false;
+  } });
+  p.append(el("div", { class: "row" }, [save]));
+}
+
+$("parse").onclick = async () => {
+  const text = $("text").value.trim();
+  if (!text && !imgB64) return say("Type, speak or add a photo first.", true);
+  $("parse").disabled = true; say("Gemma 4 is reading...");
+  try {
+    const { entries: rows } = await post("/api/parse", { text, image: imgB64, mime: "image/jpeg", customers: balances().map((c) => c.name) });
+    say(""); showPreview(rows);
+  } catch (e) { say(e.message, true); }
+  $("parse").disabled = false;
+};
+
+function clearPhoto() { imgB64 = null; $("fname").textContent = ""; $("file").value = ""; }
+$("file").onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const img = new Image();
+  img.onload = () => {
+    const s = Math.min(1, 1400 / Math.max(img.width, img.height)), c = document.createElement("canvas");
+    c.width = img.width * s; c.height = img.height * s; c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    imgB64 = c.toDataURL("image/jpeg", 0.85).split(",")[1]; $("fname").textContent = "Photo ready ✓";
+  };
+  img.src = URL.createObjectURL(f);
+};
+
+// voice input (Chrome/Edge/Android)
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+  $("mic").hidden = false; const rec = new SR(); rec.lang = "en-IN"; rec.interimResults = false; let on = false;
+  rec.onresult = (e) => { $("text").value = ($("text").value + " " + e.results[0][0].transcript).trim(); };
+  rec.onend = () => { on = false; $("mic").classList.remove("on"); $("mic").textContent = "🎤 Speak"; };
+  $("mic").onclick = () => { if (on) return rec.stop(); on = true; $("mic").classList.add("on"); $("mic").textContent = "● Listening..."; rec.start(); };
+}
+
+$("q").oninput = render;
+async function load() {
+  try { entries = (await api("/api/entries")).entries; render(); }
+  catch (e) { say(e.message, true); }
+}
+showAuth(); if (tok) load();
+</script>
+</body>
+</html>
